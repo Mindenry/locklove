@@ -19,6 +19,7 @@
     --gradient-bg: radial-gradient(2000px 1200px at 70% -20%, rgba(138, 43, 226, 0.15), transparent 70%),
         radial-gradient(1500px 900px at -20% 30%, rgba(30, 14, 50, 0.6), transparent 70%),
         linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
+    --reel-cell: 60px;
 }
 
 * {
@@ -149,6 +150,16 @@ canvas {
     color: var(--gold);
     filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.4));
     font-weight: 400;
+}
+
+/* Ensure the script word inside the gradient H1 renders with its own color */
+.hero h1 .script {
+    background: none !important;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    -webkit-text-fill-color: var(--gold);
+    color: var(--gold);
+    display: inline-block;
 }
 
 .tagline {
@@ -295,7 +306,8 @@ canvas {
 .dial:hover {
     background: linear-gradient(180deg, rgba(255, 215, 0, 0.2), rgba(139, 69, 19, 0.2));
     border-color: rgba(255, 215, 0, 0.4);
-    transform: scale(1.05);
+    /* keep geometry stable to avoid misalignment while animating reel */
+    transform: none;
     box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
 }
 
@@ -339,7 +351,7 @@ canvas {
 /* Premium reel system */
 .reel {
     position: relative;
-    height: 60px;
+    height: var(--reel-cell);
     width: 100%;
     overflow: hidden;
     border-radius: 8px;
@@ -351,6 +363,7 @@ canvas {
         inset 0 -3px 8px rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 215, 0, 0.15);
     pointer-events: none;
+    display: none; /* switch to simple digit mode */
 }
 
 .reel::before,
@@ -359,7 +372,7 @@ canvas {
     position: absolute;
     left: 0;
     right: 0;
-    height: 15px;
+    height: 10px;
     pointer-events: none;
     z-index: 3;
 }
@@ -380,11 +393,13 @@ canvas {
     right: 0;
     top: 0;
     display: grid;
-    grid-template-rows: repeat(10, 60px);
+    grid-template-rows: repeat(10, var(--reel-cell));
     justify-items: center;
     align-items: center;
-    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
+    backface-visibility: hidden;
+    transform: translateZ(0);
 }
 
 .reel-num {
@@ -395,6 +410,9 @@ canvas {
     font-variant-numeric: tabular-nums;
     user-select: none;
     pointer-events: none;
+    height: var(--reel-cell);
+    line-height: var(--reel-cell);
+    -webkit-font-smoothing: antialiased;
 }
 
 /* Subtle premium refinements for the dial system */
@@ -414,11 +432,8 @@ canvas {
     left: 10px;
     right: 10px;
     top: 50%;
-    height: 2px;
-    transform: translateY(-1px);
-    background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.55), transparent);
-    filter: blur(0.2px);
-    opacity: 0.75;
+    height: 0;
+    opacity: 0;
     pointer-events: none;
 }
 
@@ -436,7 +451,8 @@ canvas {
 }
 
 .dial.active {
-    transform: scale(0.99);
+    /* avoid scaling while dragging to keep cell height consistent */
+    transform: none;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 10px 24px rgba(0, 0, 0, 0.45);
 }
 
@@ -451,10 +467,8 @@ canvas {
     left: 6px;
     right: 6px;
     top: 50%;
-    height: 1px;
-    transform: translateY(-0.5px);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
-    opacity: 0.55;
+    height: 0;
+    opacity: 0;
     pointer-events: none;
 }
 
@@ -463,6 +477,9 @@ canvas {
         linear-gradient(180deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.35)),
         radial-gradient(120% 60% at 50% -30%, rgba(255, 255, 255, 0.08), transparent 60%),
         linear-gradient(90deg, rgba(255, 215, 0, 0.08), rgba(255, 215, 0, 0.04));
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    contain: paint;
 }
 
 .reel-track {
@@ -472,6 +489,7 @@ canvas {
 .reel-num {
     color: #ffe27a;
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 22px rgba(255, 215, 0, 0.55);
+    backface-visibility: hidden;
 }
 
 .arrow {
@@ -494,9 +512,19 @@ canvas {
     transform: scale(0.95) translateZ(0);
 }
 
-/* Hide duplicate digit overlay to keep the look clean */
+/* Digit-only mode */
 .digit {
-    display: none;
+    display: grid;
+    place-items: center;
+    height: var(--reel-cell);
+    width: 100%;
+    font-size: 32px;
+    font-weight: 700;
+    color: #ffe27a;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 22px rgba(255, 215, 0, 0.55);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+    pointer-events: none;
 }
 
 /* Premium action buttons */
@@ -659,15 +687,9 @@ canvas {
         height: 100px;
     }
 
-    .reel {
-        height: 50px;
+    :root {
+        --reel-cell: 50px;
     }
 
-    .reel-track {
-        grid-template-rows: repeat(10, 50px);
-    }
-
-    .reel-num {
-        font-size: 28px;
-    }
+    .digit { font-size: 28px; }
 }

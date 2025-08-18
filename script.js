@@ -3,11 +3,10 @@ const TARGET_CODE = [0, 9, 5, 4, 6];
 // Use new dials inside the lock
 const dials = Array.from(document.querySelectorAll(".dial"));
 const digits = dials.map((d) => d.querySelector(".digit"));
-const reels = dials.map((d) => d.querySelector(".reel-track"));
+// reel mode removed: using digit-only display
+const reels = [];
 const upButtons = dials.map((d) => d.querySelector(".up"));
 const downButtons = dials.map((d) => d.querySelector(".down"));
-const shuffleBtn = document.getElementById("shuffleBtn");
-const shareBtn = document.getElementById("shareBtn");
 const lock3d = document.getElementById("lock3d");
 const lockCard = document.getElementById("lockCard");
 const loveMessage = document.getElementById("loveMessage");
@@ -26,13 +25,6 @@ function render() {
     d.textContent = String(values[i]);
     d.dataset.value = String(values[i]);
   });
-  reels.forEach((track, i) => {
-    if (!track) return;
-    const v = values[i];
-    const cellH =
-      (track.parentElement && track.parentElement.offsetHeight) || 46;
-    track.style.transform = `translateY(${-v * cellH}px)`;
-  });
 }
 
 function nudge(index, delta) {
@@ -43,14 +35,14 @@ function nudge(index, delta) {
 }
 
 function wobble(index, delta) {
-  const wheel = dials[index];
-  wheel.animate(
+  const digitEl = digits[index];
+  digitEl.animate(
     [
-      { transform: "translateY(0px)" },
-      { transform: `translateY(${delta > 0 ? -4 : 4}px)` },
-      { transform: "translateY(0px)" },
+      { transform: "rotateX(0deg)", opacity: 1 },
+      { transform: `rotateX(${delta > 0 ? -70 : 70}deg)`, opacity: 0.4 },
+      { transform: "rotateX(0deg)", opacity: 1 },
     ],
-    { duration: 140, easing: "ease-out" }
+    { duration: 160, easing: "cubic-bezier(0.22, 1, 0.36, 1)", transformOrigin: "50% 50%" }
   );
 }
 
@@ -147,10 +139,6 @@ function revealMessage() {
   requestAnimationFrame(() => loveMessage.classList.add("show"));
 }
 
-function randomize() {
-  values = values.map(() => Math.floor(Math.random() * 10));
-  render();
-}
 
 function setFromQuery() {
   const params = new URLSearchParams(location.search);
@@ -161,14 +149,6 @@ function setFromQuery() {
   }
 }
 
-function copyShare() {
-  const url = new URL(location.href);
-  url.searchParams.set("code", values.join(""));
-  navigator.clipboard.writeText(url.toString()).then(() => {
-    shareBtn.textContent = "คัดลอกแล้ว!";
-    setTimeout(() => (shareBtn.textContent = "แชร์ลิงก์"), 1200);
-  });
-}
 
 // Mouse parallax
 const scene = document.getElementById("scene");
@@ -190,6 +170,8 @@ upButtons.forEach((btn, i) => {
   let holdInt;
   let holdTimeout;
   let holdStarted = false;
+  let isPressing = false;
+  let activePointerId = null;
   const startHold = () => {
     holdStarted = true;
     nudge(i, +1);
@@ -210,12 +192,18 @@ upButtons.forEach((btn, i) => {
     }
   };
   btn.addEventListener("pointerdown", (e) => {
+    isPressing = true;
+    activePointerId = e.pointerId;
     holdStarted = false;
     holdTimeout = setTimeout(startHold, 300);
     if (btn.setPointerCapture) btn.setPointerCapture(e.pointerId);
   });
-  const release = () => {
+  const release = (e) => {
+    if (!isPressing) return; // ignore hover exits without a prior press
+    if (e && activePointerId !== null && e.pointerId !== activePointerId) return;
     const wasHold = holdStarted;
+    isPressing = false;
+    activePointerId = null;
     clearHold();
     if (!wasHold) {
       nudge(i, +1);
@@ -226,13 +214,18 @@ upButtons.forEach((btn, i) => {
   btn.addEventListener("pointerleave", release);
   btn.addEventListener("pointercancel", release);
   // prevent native click causing duplicate step after pointer sequence
-  btn.addEventListener("click", (e) => e.preventDefault());
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
 });
 downButtons.forEach((btn, i) => {
   if (!btn) return;
   let holdInt;
   let holdTimeout;
   let holdStarted = false;
+  let isPressing = false;
+  let activePointerId = null;
   const startHold = () => {
     holdStarted = true;
     nudge(i, -1);
@@ -253,12 +246,18 @@ downButtons.forEach((btn, i) => {
     }
   };
   btn.addEventListener("pointerdown", (e) => {
+    isPressing = true;
+    activePointerId = e.pointerId;
     holdStarted = false;
     holdTimeout = setTimeout(startHold, 300);
     if (btn.setPointerCapture) btn.setPointerCapture(e.pointerId);
   });
-  const release = () => {
+  const release = (e) => {
+    if (!isPressing) return; // ignore hover exits without a prior press
+    if (e && activePointerId !== null && e.pointerId !== activePointerId) return;
     const wasHold = holdStarted;
+    isPressing = false;
+    activePointerId = null;
     clearHold();
     if (!wasHold) {
       nudge(i, -1);
@@ -268,13 +267,11 @@ downButtons.forEach((btn, i) => {
   btn.addEventListener("pointerup", release);
   btn.addEventListener("pointerleave", release);
   btn.addEventListener("pointercancel", release);
-  btn.addEventListener("click", (e) => e.preventDefault());
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
 });
-shuffleBtn.addEventListener("click", () => {
-  randomize();
-  checkUnlock();
-});
-shareBtn.addEventListener("click", copyShare);
 
 // Keyboard support
 dials.forEach((dial, i) => {
@@ -338,6 +335,7 @@ dials.forEach((dial, i) => {
   let dragging = false;
   const STEP_PX = 18;
   dial.addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest(".arrow")) return; // don't start drag from arrow buttons
     dragging = true;
     startY = ev.clientY;
     acc = 0;

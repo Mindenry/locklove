@@ -101,6 +101,10 @@ canvas {
     z-index: 4;
 }
 
+#fxCanvas {
+    z-index: 6;
+}
+
 .scene {
     position: relative;
     min-height: 100dvh;
@@ -145,8 +149,13 @@ canvas {
     letter-spacing: -0.02em;
 }
 
+.hero .tagline {
+    margin-top: 0.2rem;
+    letter-spacing: 0.02em;
+}
+
 .script {
-    font-family: "Great Vibes", cursive;
+    font-family: "Great Vibes", "Charm", cursive;
     color: var(--gold);
     filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.4));
     font-weight: 400;
@@ -270,7 +279,7 @@ canvas {
     top: 180px;
     transform: translateX(-50%);
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 0.5rem;
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(10px) saturate(200%);
@@ -634,6 +643,9 @@ canvas {
     pointer-events: auto;
 }
 
+/* Ensure overlay content can rise above FX canvas during stage 2 */
+.love-overlay.show.stage2 { z-index: 7; }
+
 .love-overlay h2 {
     font-size: clamp(2rem, 6vw, 4rem);
     margin-bottom: 2rem;
@@ -644,8 +656,161 @@ canvas {
     filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
 }
 
+/* Keep headline initially hidden until stage 2 */
+.love-overlay .overlay-content { opacity: 0; transform: translateY(10px); transition: opacity .8s ease, transform .8s ease; }
+.love-overlay.show.stage2 .overlay-content { opacity: 1; transform: translateY(0); }
+
+/* Sweet, cute unlocked scene additions */
+.love-overlay::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background:
+        radial-gradient(800px 400px at 20% 10%, rgba(255, 182, 193, 0.25), transparent 60%),
+        radial-gradient(900px 520px at 80% 30%, rgba(255, 105, 180, 0.18), transparent 60%),
+        radial-gradient(1200px 700px at 50% 120%, rgba(255, 192, 203, 0.2), transparent 60%);
+    filter: blur(40px) saturate(120%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+.love-overlay::after {
+    content: '';
+    position: absolute;
+    inset: -30%;
+    background: conic-gradient(from 0deg,
+        rgba(255, 182, 193, 0.18), rgba(255, 105, 180, 0.12), rgba(255, 182, 193, 0.18));
+    filter: blur(60px) saturate(120%);
+    opacity: 0.8;
+    animation: auroraMove 16s linear infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes auroraMove {
+    0% { transform: translate3d(-10%, -5%, 0) rotate(0deg) scale(1); }
+    50% { transform: translate3d(8%, 6%, 0) rotate(180deg) scale(1.06); }
+    100% { transform: translate3d(-10%, -5%, 0) rotate(360deg) scale(1); }
+}
+
+.overlay-content {
+    max-width: 760px;
+    padding: 0 20px;
+    position: relative;
+    z-index: 1;
+}
+
+.overlay-subtitle {
+    font-size: clamp(1.1rem, 3vw, 1.6rem);
+    color: var(--text);
+    opacity: 0.9;
+    margin-top: -0.8rem;
+    margin-bottom: 1.4rem;
+    text-shadow: 0 0 18px rgba(255, 192, 203, 0.35);
+}
+
+.typewriter {
+    display: grid;
+    gap: 10px;
+    margin-top: 0.8rem;
+}
+
+.type-line {
+    min-height: 1.6em;
+    font-size: clamp(1rem, 3.2vw, 1.4rem);
+    color: #ffe6ef;
+    text-shadow: 0 0 18px rgba(255, 105, 180, 0.35);
+    letter-spacing: 0.2px;
+}
+
+.type-caret::after {
+    content: '▍';
+    margin-left: 4px;
+    color: var(--accent-2);
+    animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+}
+
+/* Kawaii floating hearts */
+.kawaii-hearts {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.k-heart {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: var(--accent-2);
+    transform: rotate(45deg);
+    opacity: 0.85;
+    filter: drop-shadow(0 2px 8px rgba(255, 105, 180, 0.35));
+    animation: floatUp 10s linear infinite;
+}
+
+.k-heart::before,
+.k-heart::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: var(--accent-2);
+    border-radius: 50%;
+}
+
+.k-heart::before { left: -9px; }
+.k-heart::after { top: -9px; }
+
+@keyframes floatUp {
+    0% { transform: translateY(40px) rotate(45deg) scale(0.8); opacity: 0; }
+    10% { opacity: 0.9; }
+    100% { transform: translateY(-70vh) rotate(45deg) scale(1.1); opacity: 0; }
+}
+
+.k1 { left: 12%; animation-duration: 12s; animation-delay: 0s; }
+.k2 { left: 28%; animation-duration: 10s; animation-delay: 1s; }
+.k3 { left: 46%; animation-duration: 11s; animation-delay: 0.6s; }
+.k4 { left: 64%; animation-duration: 9.5s; animation-delay: 1.2s; }
+.k5 { left: 82%; animation-duration: 12.5s; animation-delay: 0.2s; }
+
+/* Hide pre-unlock UI once unlocked */
+body.unlocked .hero,
+body.unlocked .footer,
+body.unlocked .lock-card { display: none; }
+
+/* Overlay actions & pickup carousel */
+.overlay-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 18px;
+}
+
+.btn-love {
+    background: var(--gradient-primary);
+    color: #1a1026;
+    border: 1px solid rgba(255,255,255,0.25);
+    box-shadow: 0 10px 30px rgba(255, 61, 110, 0.35);
+}
+
+.btn-love:hover { transform: translateY(-2px) scale(1.02); }
+
+.pickup {
+    margin-top: 16px;
+    color: #ffe6ef;
+    min-height: 1.4em;
+    opacity: 0.95;
+    text-shadow: 0 0 14px rgba(255, 105, 180, 0.28);
+}
+
 /* Enhanced transitions */
-.scene.fade-out>* {
+.scene.fade-out>*:not(.love-overlay) {
     opacity: 0;
     transform: translateY(-20px) scale(0.95);
     transition: all 1s ease;
@@ -693,3 +858,61 @@ canvas {
 
     .digit { font-size: 28px; }
 }
+
+/* Mobile narrow tweaks */
+@media (max-width: 480px) {
+    .lock-3d { width: 220px; height: 260px; }
+    .dials { top: 150px; gap: 0.2rem; padding: 0.6rem 0.8rem; }
+    .dial { width: 38px; height: 90px; }
+    :root { --reel-cell: 46px; }
+    .digit { font-size: 26px; }
+}
+
+/* Romantic letter modal */
+.love-letter {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 7;
+    background: rgba(8, 3, 21, 0.6);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .4s ease;
+}
+
+.love-letter.show { opacity: 1; pointer-events: auto; }
+
+.paper {
+    width: min(720px, 92vw);
+    max-height: 80vh;
+    overflow: auto;
+    background: linear-gradient(180deg, #fff9fb, #ffeef5);
+    color: #5a4150;
+    border-radius: 20px;
+    box-shadow: 0 40px 120px rgba(255, 61, 110, 0.25);
+    border: 1px solid rgba(255, 105, 180, 0.25);
+    padding: clamp(16px, 3vw, 28px);
+    position: relative;
+}
+
+.paper::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(180deg, transparent 0 28px, rgba(255, 182, 193, .18) 28px 29px);
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+.letter-header { margin-bottom: 8px; }
+.letter-header h3 { color: #e35d86; filter: drop-shadow(0 4px 14px rgba(227,93,134,.35)); }
+
+.letter-body {
+    line-height: 1.9;
+    font-size: clamp(15px, 2.4vw, 18px);
+    white-space: pre-wrap;
+}
+
+.letter-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }

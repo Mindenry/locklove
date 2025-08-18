@@ -1,4 +1,4 @@
-const TARGET_CODE = [0, 9, 5, 4, 6];
+const TARGET_CODE = [2, 0, 1, 1, 4, 6];
 
 // Use new dials inside the lock
 const dials = Array.from(document.querySelectorAll(".dial"));
@@ -11,8 +11,19 @@ const lock3d = document.getElementById("lock3d");
 const lockCard = document.getElementById("lockCard");
 const loveMessage = document.getElementById("loveMessage");
 const loveOverlay = document.getElementById("loveOverlay");
+const tw1 = document.getElementById("tw1");
+const tw2 = document.getElementById("tw2");
+const tw3 = document.getElementById("tw3");
+const btnReplay = document.getElementById("btnReplay");
+const btnSurprise = document.getElementById("btnSurprise");
+const btnLetter = document.getElementById("btnLetter");
+const btnCopyLetter = document.getElementById("btnCopyLetter");
+const btnCloseLetter = document.getElementById("btnCloseLetter");
+const pickup = document.getElementById("pickupCarousel");
+const loveLetter = document.getElementById("loveLetter");
+const letterBody = document.getElementById("letterBody");
 
-let values = [0, 0, 0, 0, 0];
+let values = Array(TARGET_CODE.length).fill(0);
 let audioCtx;
 let lastTickTime = 0;
 let tickPlaybackRate = 1;
@@ -123,6 +134,8 @@ function checkUnlock() {
   lockCard.classList.add("unlocked");
   pulse(lock3d);
   fireConfetti();
+  setTimeout(() => fireConfetti(), 250);
+  setTimeout(() => fireConfetti(), 550);
   revealMessage();
   animateShine();
   try {
@@ -131,6 +144,13 @@ function checkUnlock() {
 
   // morph points to heart scene
   startMorphToHeart();
+  // sweet extras
+  sparkleBurst();
+  ringPulse();
+  petalShower();
+  heartFireworks();
+  playChime();
+  startHeartOutline();
   return true;
 }
 
@@ -143,7 +163,8 @@ function revealMessage() {
 function setFromQuery() {
   const params = new URLSearchParams(location.search);
   const code = params.get("code");
-  if (code && /^\d{5}$/.test(code)) {
+  const re = new RegExp("^\\d{" + TARGET_CODE.length + "}$");
+  if (code && re.test(code)) {
     values = code.split("").map((c) => Number(c));
     render();
   }
@@ -368,7 +389,13 @@ dials.forEach((dial, i) => {
 const confettiCanvas = document.getElementById("confettiCanvas");
 const heartsCanvas = document.getElementById("heartsCanvas");
 const morphCanvas = document.getElementById("morphCanvas");
+const fxCanvas = document.getElementById("fxCanvas");
 const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+// Predeclare FX container early to avoid TDZ on first loop()
+let fxItems = [];
+// Predeclare heart outline state early to avoid TDZ
+let heartOutline = { active: false, t: 0, beads: [], targets: [] };
 
 function fitCanvas(canvas) {
   const { innerWidth: w, innerHeight: h } = window;
@@ -380,10 +407,12 @@ function fitCanvas(canvas) {
 fitCanvas(confettiCanvas);
 fitCanvas(heartsCanvas);
 fitCanvas(morphCanvas);
+fitCanvas(fxCanvas);
 window.addEventListener("resize", () => {
   fitCanvas(confettiCanvas);
   fitCanvas(heartsCanvas);
   fitCanvas(morphCanvas);
+  fitCanvas(fxCanvas);
   render();
 });
 
@@ -463,12 +492,17 @@ function spawnHearts(count = 12) {
 function drawHeart(ctx, x, y, size, color, alpha) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.scale(size, size);
+  // Make heart responsive & crisp: use DPR aware scale
+  const s = size * 0.06 * DPR; // normalize size
+  ctx.scale(s, s);
   ctx.beginPath();
-  ctx.moveTo(0, -0.5);
-  ctx.bezierCurveTo(0.5, -1.2, 1.8, -0.1, 0, 1);
-  ctx.bezierCurveTo(-1.8, -0.1, -0.5, -1.2, 0, -0.5);
-  ctx.fillStyle = `rgba(255, 61, 110, ${alpha})`;
+  ctx.moveTo(0, -8);
+  ctx.bezierCurveTo(6, -18, 24, -2, 0, 20);
+  ctx.bezierCurveTo(-24, -2, -6, -18, 0, -8);
+  const grd = ctx.createRadialGradient(0, -6, 2, 0, 6, 20);
+  grd.addColorStop(0, `rgba(255, 122, 153, ${alpha})`);
+  grd.addColorStop(1, `rgba(255, 61, 110, ${alpha})`);
+  ctx.fillStyle = grd;
   ctx.fill();
   ctx.restore();
 }
@@ -499,12 +533,15 @@ function animateShine() {
 const confettiCtx = confettiCanvas.getContext("2d");
 const heartsCtx = heartsCanvas.getContext("2d");
 const morphCtx = morphCanvas.getContext("2d");
+const fxCtx = fxCanvas.getContext("2d");
 function loop() {
   confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
   heartsCtx.clearRect(0, 0, heartsCanvas.width, heartsCanvas.height);
+  fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
   drawConfetti(confettiCtx);
   drawHearts(heartsCtx);
   drawMorph(morphCtx);
+  drawFX(fxCtx);
   requestAnimationFrame(loop);
 }
 
@@ -565,38 +602,418 @@ window.addEventListener("resize", () => {
   heartTargets = buildHeartTargets();
 });
 
+// Draw morphing particles into a heart shape on the morphCanvas
+function drawMorph(ctx) {
+  const w = morphCanvas.width, h = morphCanvas.height;
+  // Clear the morph canvas here since the main loop doesn't
+  ctx.clearRect(0, 0, w, h);
+  if (!morphState.active) return;
+
+  // Ease-in progress for smoother converge
+  morphState.t = Math.min(1, morphState.t + 0.02);
+  const t = 1 - Math.pow(1 - morphState.t, 3);
+
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const trg = heartTargets[i % heartTargets.length];
+    // Move particle towards target
+    p.x += (trg.x - p.x) * (0.06 + 0.10 * t);
+    p.y += (trg.y - p.y) * (0.06 + 0.10 * t);
+    // Draw
+    const alpha = 0.4 + 0.5 * t;
+    ctx.fillStyle = `hsla(${p.hue}deg, 95%, 70%, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, (0.7 + 0.6 * t) * DPR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// แก้ไขฟังก์ชัน startMorphToHeart() ให้หัวใจจางลงก่อนแสดงข้อความ
 function startMorphToHeart() {
   morphState.active = true;
   morphState.t = 0;
   document.getElementById("scene").classList.add("fade-out");
   loveOverlay.hidden = false;
+  
+  // Stage 1: แสดงเฉพาะหัวใจเท่านั้น
   requestAnimationFrame(() => loveOverlay.classList.add("show"));
+  
+  // ซ่อน UI เดิม
+  document.body.classList.add("unlocked");
+  
+  // เริ่มแสดงหัวใจ
+  startHeartOutline();
+  
+  // หลังจาก 3 วินาที เริ่มทำให้หัวใจจางลง
+  setTimeout(() => {
+    heartOutline.fadeOut = true;
+    heartOutline.fadeTimer = 0;
+  }, 3000);
+  
+  // หลังจากหัวใจจางหมด (ประมาณ 1.5 วินาที) ค่อยแสดงข้อความ
+  setTimeout(() => {
+    // หยุดทุก effect ของหัวใจ
+    morphState.active = false;
+    heartOutline.active = false;
+    heartOutline.fadeOut = false;
+    heartOutline.fadeTimer = 0;
+    
+    // แสดงข้อความและปุ่มต่างๆ (stage 2)
+    loveOverlay.classList.add('stage2');
+    startTypewriter();
+    bindOverlayTrail();
+  }, 4500); // 3000 + 1500 = 4.5 วินาที
 }
 
-function drawMorph(ctx) {
-  if (!morphState.active) return;
-  const w = morphCanvas.width,
-    h = morphCanvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  morphState.t = Math.min(1, morphState.t + 0.008);
-  const ease = (t) => 1 - Math.pow(1 - t, 3);
-  const t = ease(morphState.t);
-
-  for (let i = 0; i < particles.length; i++) {
-    const p = particles[i];
-    const target = heartTargets[i % heartTargets.length];
-    p.x += (target.x - p.x) * (0.03 + t * 0.08);
-    p.y += (target.y - p.y) * (0.03 + t * 0.08);
-
-    ctx.fillStyle = `hsla(${p.hue}deg, 90%, ${60 + Math.sin(i) * 10}%, ${
-      0.35 + 0.45 * t
-    })`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * DPR * (0.8 + t), 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
+// drawFX is defined later with final behavior
 
 // Start loop after morph code is defined to avoid TDZ errors
 loop();
+
+// =============== Typewriter encouragement ===============
+function typeLine(el, text, speed = 28) {
+  return new Promise((resolve) => {
+    if (!el) return resolve();
+    el.textContent = "";
+    let i = 0;
+    const timer = setInterval(() => {
+      el.textContent += text[i] || "";
+      i++;
+      if (i >= text.length) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, speed);
+  });
+}
+
+async function startTypewriter() {
+  const line1 = "คุณ Baby Bambi ครับ ผมอยากบอกว่า ต่อให้โลกวุ่นวายแค่ไหน";
+  const line2 = "ขอให้รู้ไว้นะ ว่ามีผมคอยอยู่ข้างคุณ—ไม่ไปไหน 💞";
+  const line3 = "พักก่อนนิดนึงนะคุณ แล้วค่อยไปต่อ ผมเชื่อในคุณเสมอ ✨";
+  await typeLine(tw1, line1, 26);
+  await new Promise((r) => setTimeout(r, 300));
+  await typeLine(tw2, line2, 24);
+  await new Promise((r) => setTimeout(r, 400));
+  await typeLine(tw3, line3, 22);
+}
+
+// =============== Extra FX (sparkles, rings, petals, fireworks) ===============
+// fxItems is declared near top to avoid TDZ
+
+function sparkleBurst() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  for (let i = 0; i < 80; i++) {
+    fxItems.push({
+      kind: 'spark',
+      x: w / 2,
+      y: h * 0.35,
+      vx: (Math.random() - 0.5) * 5 * DPR,
+      vy: (Math.random() - 0.5) * 5 * DPR,
+      life: 70 + Math.random() * 30,
+      hue: 320 + Math.random() * 40,
+      size: 1 + Math.random() * 2
+    });
+  }
+}
+
+function ringPulse() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  fxItems.push({ kind: 'ring', x: w / 2, y: h * 0.35, r: 10, life: 80 });
+}
+
+function petalShower() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  for (let i = 0; i < 20; i++) {
+    fxItems.push({
+      kind: 'petal',
+      x: Math.random() * w,
+      y: -20,
+      vx: (Math.random() - 0.5) * 0.6 * DPR,
+      vy: (0.8 + Math.random() * 0.7) * DPR,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.03,
+      life: 400 + Math.random() * 200
+    });
+  }
+}
+
+function heartFireworks() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  const center = { x: w / 2, y: h * 0.38 };
+  const n = 36;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    fxItems.push({
+      kind: 'hfw',
+      x: center.x,
+      y: center.y,
+      vx: Math.cos(a) * 2.2 * DPR,
+      vy: Math.sin(a) * 2.2 * DPR,
+      hue: 340 + (i % 6) * 5,
+      life: 90,
+      size: 2
+    });
+  }
+}
+
+// Smooth heart outline made of moving beads (post-unlock centerpiece)
+function startHeartOutline() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  const cx = w / 2, cy = h * 0.40;
+  const scale = Math.min(w, h) * 0.26; // larger, fuller heart
+  const N = 360; // denser bead count for smoother outline
+  heartOutline.active = true;
+  heartOutline.t = 0;
+  heartOutline.beads = Array.from({ length: N }, (_, i) => ({
+    u: (i / N) * Math.PI * 2, // param angle
+    x: Math.random() * w,
+    y: Math.random() * h,
+    hue: 338 + Math.random() * 24,
+    size: 1.6 + Math.random() * 1.2,
+  }));
+  // store target points
+  heartOutline.targets = heartOutline.beads.map((b) => {
+    const x = 16 * Math.pow(Math.sin(b.u), 3) * scale + cx;
+    const y = -(
+      13 * Math.cos(b.u) - 5 * Math.cos(2 * b.u) - 2 * Math.cos(3 * b.u) - Math.cos(4 * b.u)
+    ) * scale + cy;
+    return { x, y };
+  });
+}
+
+function drawFX(ctx) {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  fxItems = fxItems.filter((it) => it.life > 0);
+  // Draw soft vignette heart outline if active
+  if (heartOutline.active) {
+    heartOutline.t = Math.min(1, heartOutline.t + 0.02);
+    const t = 1 - Math.pow(1 - heartOutline.t, 3);
+    ctx.save();
+    // draw soft gradient glow behind
+    const path = new Path2D();
+    for (let i = 0; i < heartOutline.beads.length; i++) {
+      const b = heartOutline.beads[i];
+      const trg = heartOutline.targets[i];
+      b.x += (trg.x - b.x) * (0.07 + 0.10 * t);
+      b.y += (trg.y - b.y) * (0.07 + 0.10 * t);
+      const wob = Math.sin(performance.now() * 0.0018 + i * 0.6) * 1.2 * DPR;
+      const px = b.x + wob;
+      const py = b.y;
+      path.moveTo(px, py);
+      path.arc(px, py, b.size * DPR * (1.2 + 0.4 * t), 0, Math.PI * 2);
+    }
+    const glow = ctx.createRadialGradient(w/2, h*0.4, Math.max(30*DPR, Math.min(w,h)*0.05), w/2, h*0.4, Math.min(w,h)*0.35);
+    glow.addColorStop(0, 'rgba(255, 182, 193, 0.25)');
+    glow.addColorStop(1, 'rgba(255, 182, 193, 0.0)');
+    ctx.fillStyle = glow;
+    ctx.fill(path);
+
+    // draw crisp luminous outline with gradient stroke
+    ctx.lineWidth = 2.2 * DPR;
+    const strokeGrad = ctx.createLinearGradient(w*0.4, h*0.3, w*0.6, h*0.5);
+    strokeGrad.addColorStop(0, 'rgba(255, 120, 160, 0.95)');
+    strokeGrad.addColorStop(0.5, 'rgba(255, 200, 220, 0.95)');
+    strokeGrad.addColorStop(1, 'rgba(255, 120, 160, 0.95)');
+    ctx.strokeStyle = strokeGrad;
+    ctx.shadowColor = 'rgba(255, 140, 180, 0.55)';
+    ctx.shadowBlur = 18 * DPR;
+
+    // Build smooth polyline along ordered beads
+    ctx.beginPath();
+    for (let i = 0; i < heartOutline.beads.length; i += 6) {
+      const b = heartOutline.beads[i];
+      const wob = Math.sin(performance.now() * 0.0018 + i * 0.6) * 1.2 * DPR;
+      const px = b.x + wob;
+      const py = b.y;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    // fade factor
+    let fadeMul = 1;
+    if (heartOutline.fadeOut) {
+      heartOutline.fadeTimer = (heartOutline.fadeTimer || 0) + 16;
+      const fadeProgress = Math.min(1, heartOutline.fadeTimer / 1500);
+      fadeMul = 1 - fadeProgress * fadeProgress;
+    }
+    ctx.globalAlpha = 0.9 * fadeMul;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    if (heartOutline.fadeOut && heartOutline.fadeTimer > 1500) {
+      heartOutline.active = false;
+      heartOutline.fadeOut = false;
+      heartOutline.fadeTimer = 0;
+    }
+  }
+
+  for (const it of fxItems) {
+    it.life--;
+    if (it.kind === 'spark') {
+      it.x += it.vx; it.y += it.vy; it.vy += 0.02 * DPR;
+      ctx.fillStyle = `hsla(${it.hue}deg,95%,65%,${Math.max(0, it.life / 80)})`;
+      ctx.beginPath(); ctx.arc(it.x, it.y, it.size * DPR, 0, Math.PI * 2); ctx.fill();
+    } else if (it.kind === 'ring') {
+      it.r += 3 * DPR; const alpha = Math.max(0, it.life / 80);
+      const grad = ctx.createRadialGradient(it.x, it.y, Math.max(1, it.r - 6), it.x, it.y, it.r + 6);
+      grad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.3})`);
+      grad.addColorStop(1, `rgba(255, 105, 180, 0)`);
+      ctx.strokeStyle = `rgba(255, 182, 193, ${alpha})`;
+      ctx.lineWidth = 2 * DPR;
+      ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(it.x, it.y, it.r + 6, 0, Math.PI * 2); ctx.fill();
+    } else if (it.kind === 'petal') {
+      it.x += it.vx; it.y += it.vy; it.rot += it.vr;
+      drawPetal(ctx, it.x, it.y, 8 * DPR, it.rot, 0.85);
+    } else if (it.kind === 'hfw') {
+      it.x += it.vx; it.y += it.vy; it.vy += 0.02 * DPR;
+      ctx.fillStyle = `hsla(${it.hue}deg,95%,65%,${Math.max(0, it.life / 90)})`;
+      ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(0.78); // rotate a bit
+      ctx.beginPath();
+      ctx.moveTo(0, -2 * DPR);
+      ctx.bezierCurveTo(1.5 * DPR, -3.5 * DPR, 3.6 * DPR, -0.2 * DPR, 0, 2.5 * DPR);
+      ctx.bezierCurveTo(-3.6 * DPR, -0.2 * DPR, -1.5 * DPR, -3.5 * DPR, 0, -2 * DPR);
+      ctx.fill(); ctx.restore();
+    }
+  }
+}
+
+function drawPetal(ctx, x, y, s, rot, alpha) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s / 12, s / 12);
+  ctx.fillStyle = `rgba(255, 182, 193, ${alpha})`;
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.bezierCurveTo(4, -12, 12, -1, 0, 10);
+  ctx.bezierCurveTo(-12, -1, -4, -12, 0, -6);
+  ctx.fill(); ctx.restore();
+}
+
+// Pointer trail on overlay (sparkly hearts following the cursor)
+function bindOverlayTrail() {
+  if (!loveOverlay) return;
+  let last = 0;
+  loveOverlay.addEventListener('pointermove', (e) => {
+    const now = performance.now();
+    if (now - last < 20) return;
+    last = now;
+    const rect = loveOverlay.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * DPR;
+    const y = (e.clientY - rect.top) * DPR;
+    // spawn spark
+    fxItems.push({ kind: 'spark', x, y, vx: (Math.random()-0.5)*1.2, vy: (Math.random()-0.5)*1.2, life: 50, hue: 330+Math.random()*30, size: 1.2 });
+    // small heart
+    fxItems.push({ kind: 'hfw', x, y, vx: (Math.random()-0.5)*0.8, vy: (Math.random()-0.5)*0.8, hue: 340, life: 60, size: 1.4 });
+  });
+}
+
+// =============== Sweet audio chime ===============
+function playChime() {
+  ensureAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const notes = [0, 4, 7, 12]; // major-ish arpeggio
+  notes.forEach((semi, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 1800;
+    osc.type = 'sine';
+    osc.frequency.value = 440 * Math.pow(2, semi / 12);
+    g.gain.setValueAtTime(0.0001, now + i * 0.08);
+    g.gain.exponentialRampToValueAtTime(0.12, now + i * 0.08 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 0.5);
+    osc.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    osc.start(now + i * 0.08); osc.stop(now + i * 0.08 + 0.6);
+  });
+}
+
+// =============== Overlay actions ===============
+if (btnReplay) {
+  btnReplay.addEventListener('click', async () => {
+    fireMegaShow();
+    tw1 && (tw1.textContent = ''); tw2 && (tw2.textContent = ''); tw3 && (tw3.textContent = '');
+    await startTypewriter();
+  });
+}
+
+if (btnSurprise) {
+  btnSurprise.addEventListener('click', () => {
+    fireMegaShow();
+    carouselPickup();
+  });
+}
+
+
+function showPickup(text) {
+  if (!pickup) return;
+  pickup.textContent = text;
+}
+
+const pickupList = [
+  'ขอยืมมือคุณ… ไปจับมือผมตลอดไปนะ',
+  'คุณคือบ้านของผม แม้โลกจะวุ่นวาย',
+  'ดวงดาวก็ยังแพ้แววตาคุณ',
+  'กาแฟอาจขม แต่รักของผมกับคุณ หวานกว่านั้นมาก',
+  'แค่มองตาคุณ หัวใจก็ล็อคแล้ว'
+];
+
+function carouselPickup() {
+  if (!pickup) return;
+  const next = pickupList[(Math.random() * pickupList.length) | 0];
+  showPickup(next + ' ✨');
+}
+
+// =============== Love Letter Modal ===============
+const LETTER_TEXT = `\
+คุณ Baby Bambi ที่น่ารักของผม,\n\nเวลาที่คุณเหนื่อย ผมอยากให้รู้ว่า คุณไม่เคยต้องเดินคนเดียวเลย\nเพราะทุกก้าวของคุณ มีผมเดินเคียงข้างเสมอ\n\nบางวันโลกอาจดังและวุ่นวาย แต่หัวใจเราจะเบาและเงียบสงบ\nเมื่อคุณมองมาทางนี้—ผมก็ยิ้มแล้ว :)\n\nพักหายใจสักครู่ แล้วไปต่อด้วยกันนะครับ\nผมภูมิใจในตัวคุณมากๆ และจะอยู่ตรงนี้…\nเพื่อบอกคำเดิมซ้ำๆ ว่า “คุณเก่งและน่ารักที่สุดในโลกของผม”\n\nรัก,\nผม`; 
+
+function typeLetter(text, speed = 14) {
+  return new Promise((resolve) => {
+    if (!letterBody) return resolve();
+    letterBody.textContent = '';
+    let i = 0;
+    const timer = setInterval(() => {
+      letterBody.textContent += text[i] || '';
+      i++;
+      if (i >= text.length) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, speed);
+  });
+}
+
+if (btnLetter && loveLetter) {
+  btnLetter.addEventListener('click', async () => {
+    loveLetter.hidden = false;
+    requestAnimationFrame(() => loveLetter.classList.add('show'));
+    await typeLetter(LETTER_TEXT, 14);
+  });
+}
+
+if (btnCloseLetter && loveLetter) {
+  btnCloseLetter.addEventListener('click', () => {
+    loveLetter.classList.remove('show');
+    setTimeout(() => { loveLetter.hidden = true; }, 300);
+  });
+}
+
+if (btnCopyLetter) {
+  btnCopyLetter.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(LETTER_TEXT);
+      showPickup('คัดลอกจดหมายแล้วนะ ❤');
+    } catch {}
+  });
+}
+
+// One-tap mega show to make it denser and wow
+function fireMegaShow() {
+  fireConfetti(); setTimeout(fireConfetti, 200); setTimeout(fireConfetti, 400);
+  sparkleBurst(); setTimeout(sparkleBurst, 120);
+  ringPulse(); setTimeout(ringPulse, 240);
+  heartFireworks(); setTimeout(heartFireworks, 300);
+  petalShower();
+  playChime();
+}

@@ -12,7 +12,7 @@
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Poppins:wght@300;400;600;700&family=Great+Vibes&family=Charm:wght@400;700&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Poppins:wght@300;400;600;700&family=Great+Vibes&family=Charm:wght@400;700&family=Cormorant+Garamond:wght@400;500;600&family=Noto+Serif+Thai:wght@400;500;600;700&family=Taviraj:wght@500;600;700&family=Sriracha&display=swap"
             rel="stylesheet" />
         <link rel="stylesheet" href="./style.css" />
     </head>
@@ -246,14 +246,33 @@
                 <div class="love-letter" id="loveLetter" hidden>
                     <div class="paper">
                         <div class="letter-header">
+                            <div class="letter-meta">
+                                <span class="monogram" id="letterMonogram">M</span>
+                                <span class="letter-date" id="letterDate"></span>
+                            </div>
                             <h3 class="script">ถึง คุณ Baby Bambi</h3>
                         </div>
                         <div class="letter-body" id="letterBody">
                             <!-- will be typed by JS -->
                         </div>
+                        <div class="gilded-divider" aria-hidden="true"></div>
+                        <div class="letter-footer">
+                            <div class="signoff">อยู่ข้างๆคุณเสมอ</div>
+                            <div class="signature-wrap" id="signatureWrap">
+                                <div class="signature-line"></div>
+                                <div class="signature-name" id="signatureName">ผม</div>
+                                <svg class="signature-flourish" viewBox="0 0 200 40" width="200" height="40" aria-hidden="true">
+                                    <path d="M2 20 C 40 0, 80 40, 120 20 S 200 20, 198 20"/>
+                                </svg>
+                                <div class="signature-heart" aria-hidden="true"></div>
+                            </div>
+                        </div>
                         <div class="letter-actions">
                             <button class="btn ghost" id="btnCopyLetter">คัดลอกจดหมาย</button>
                             <button class="btn" id="btnCloseLetter">ปิดจดหมาย</button>
+                        </div>
+                        <div class="wax-seal" aria-hidden="true">
+                            <span class="seal-initials" id="sealInitials">♡</span>
                         </div>
                     </div>
                 </div>

@@ -22,6 +22,11 @@ const btnCloseLetter = document.getElementById("btnCloseLetter");
 const pickup = document.getElementById("pickupCarousel");
 const loveLetter = document.getElementById("loveLetter");
 const letterBody = document.getElementById("letterBody");
+const signatureWrap = document.getElementById("signatureWrap");
+const signatureName = document.getElementById("signatureName");
+const sealInitials = document.getElementById("sealInitials");
+const letterMonogram = document.getElementById("letterMonogram");
+const letterDate = document.getElementById("letterDate");
 
 let values = Array(TARGET_CODE.length).fill(0);
 let audioCtx;
@@ -167,6 +172,35 @@ function setFromQuery() {
   if (code && re.test(code)) {
     values = code.split("").map((c) => Number(c));
     render();
+  }
+
+  // Optional signature override via ?sign=
+  const sign = params.get("sign");
+  const defaultSign = 'มายด์';
+  if (signatureName) {
+    signatureName.textContent = sign ? decodeURIComponent(sign) : defaultSign;
+  }
+  // Wax seal initials from first character(s)
+  if (sealInitials) {
+    const s = (signatureName && signatureName.textContent) || "♡";
+    // Use first glyph only, fallback to heart if empty
+    const first = s.trim().charAt(0);
+    sealInitials.textContent = first || "♡";
+  }
+  // Monogram (first letter) and date (today)
+  if (letterMonogram) {
+    const s = (signatureName && signatureName.textContent) || defaultSign;
+    letterMonogram.textContent = s.trim().charAt(0) || 'M';
+  }
+  if (letterDate) {
+    try {
+      const d = new Date();
+      const day = d.getDate().toString().padStart(2, '0');
+      const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const month = monthNames[d.getMonth()];
+      const year = d.getFullYear();
+      letterDate.textContent = `${day} ${month} ${year}`;
+    } catch {}
   }
 }
 
@@ -643,6 +677,11 @@ function startMorphToHeart() {
   
   // เริ่มแสดงหัวใจ
   startHeartOutline();
+  // Advanced layered FX for WOW effect
+  startOrbits();
+  spawnBokehLayer();
+  startRibbons();
+  startTwinkles();
   
   // หลังจาก 3 วินาที เริ่มทำให้หัวใจจางลง
   setTimeout(() => {
@@ -875,6 +914,73 @@ function drawFX(ctx) {
       ctx.bezierCurveTo(1.5 * DPR, -3.5 * DPR, 3.6 * DPR, -0.2 * DPR, 0, 2.5 * DPR);
       ctx.bezierCurveTo(-3.6 * DPR, -0.2 * DPR, -1.5 * DPR, -3.5 * DPR, 0, -2 * DPR);
       ctx.fill(); ctx.restore();
+    } else if (it.kind === 'bokeh') {
+      // Draw behind using destination-over
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-over';
+      it.x += it.vx; it.y += it.vy;
+      if (it.x < -50 || it.x > w + 50) it.vx *= -1;
+      if (it.y < -50 || it.y > h + 50) it.vy *= -1;
+      const r = it.r * DPR;
+      const grd = ctx.createRadialGradient(it.x, it.y, 0, it.x, it.y, r);
+      grd.addColorStop(0, `hsla(${it.hue}deg, 80%, 85%, ${it.alpha * 0.8})`);
+      grd.addColorStop(1, `hsla(${it.hue}deg, 80%, 85%, 0)`);
+      ctx.fillStyle = grd;
+      ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (it.kind === 'orbit') {
+      it.a += it.av;
+      const ox = it.cx + Math.cos(it.a) * it.r * DPR;
+      const oy = it.cy + Math.sin(it.a) * it.r * DPR * 0.9;
+      ctx.fillStyle = `hsla(${it.hue}deg, 95%, 70%, 0.9)`;
+      ctx.shadowColor = `hsla(${it.hue}deg, 95%, 70%, 0.6)`;
+      ctx.shadowBlur = 10 * DPR;
+      ctx.beginPath(); ctx.arc(ox, oy, it.size * DPR, 0, Math.PI * 2); ctx.fill();
+      // faint orbit path
+      ctx.shadowBlur = 0; ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = `hsla(${it.hue}deg, 85%, 70%, 0.5)`;
+      ctx.lineWidth = 0.8 * DPR;
+      ctx.beginPath(); ctx.ellipse(it.cx, it.cy, it.r * DPR, it.r * 0.9 * DPR, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (it.kind === 'ribbon') {
+      // Update ribbon tail
+      it.t += it.vt;
+      const angle = it.baseA + Math.sin(it.t * 0.8) * 0.4;
+      const rad = it.baseR + Math.sin(it.t * 0.6) * 12 * DPR;
+      const px = it.cx + Math.cos(angle) * rad;
+      const py = it.cy + Math.sin(angle) * rad * 0.9;
+      it.points.push({ x: px, y: py });
+      if (it.points.length > it.max) it.points.shift();
+      // Draw ribbon path
+      ctx.save();
+      ctx.strokeStyle = `hsla(${it.hue}deg, 90%, 70%, 0.55)`;
+      ctx.lineWidth = 2 * DPR;
+      ctx.shadowColor = `hsla(${it.hue}deg, 90%, 70%, 0.6)`;
+      ctx.shadowBlur = 12 * DPR;
+      ctx.beginPath();
+      for (let i = 0; i < it.points.length; i++) {
+        const p = it.points[i];
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    } else if (it.kind === 'twinkle') {
+      it.t += 0.1;
+      const s = (0.6 + 0.4 * Math.sin(it.t * it.speed));
+      ctx.save();
+      ctx.translate(it.x, it.y);
+      ctx.rotate(it.rot);
+      ctx.scale(s * DPR, s * DPR);
+      ctx.fillStyle = `hsla(${it.hue}deg, 100%, 90%, ${0.6 * s})`;
+      ctx.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2;
+        const r1 = 2.2, r2 = 1.0;
+        ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
+        ctx.lineTo(Math.cos(a + Math.PI / 5) * r2, Math.sin(a + Math.PI / 5) * r2);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
   }
 }
@@ -966,7 +1072,7 @@ function carouselPickup() {
 
 // =============== Love Letter Modal ===============
 const LETTER_TEXT = `\
-คุณ Baby Bambi ที่น่ารักของผม,\n\nเวลาที่คุณเหนื่อย ผมอยากให้รู้ว่า คุณไม่เคยต้องเดินคนเดียวเลย\nเพราะทุกก้าวของคุณ มีผมเดินเคียงข้างเสมอ\n\nบางวันโลกอาจดังและวุ่นวาย แต่หัวใจเราจะเบาและเงียบสงบ\nเมื่อคุณมองมาทางนี้—ผมก็ยิ้มแล้ว :)\n\nพักหายใจสักครู่ แล้วไปต่อด้วยกันนะครับ\nผมภูมิใจในตัวคุณมากๆ และจะอยู่ตรงนี้…\nเพื่อบอกคำเดิมซ้ำๆ ว่า “คุณเก่งและน่ารักที่สุดในโลกของผม”\n\nรัก,\nผม`; 
+คุณ Baby Bambi ที่น่ารักของผม,\n\nเวลาที่คุณเหนื่อย ผมอยากให้รู้ว่า คุณไม่เคยต้องเดินคนเดียวเลย\nเพราะทุกก้าวของคุณ มีผมเดินเคียงข้างเสมอ\n\nบางวันโลกอาจดังและวุ่นวาย แต่หัวใจเราจะเบาและเงียบสงบ\nเมื่อคุณมองมาทางนี้—ผมก็ยิ้มแล้ว :)\n\nพักหายใจสักครู่ แล้วไปต่อด้วยกันนะครับ\nผมภูมิใจในตัวคุณมากๆ และจะอยู่ตรงนี้…\nเพื่อบอกคำเดิมซ้ำๆ ว่า “คุณเก่งและน่ารักที่สุดในโลกของผม”`;
 
 function typeLetter(text, speed = 14) {
   return new Promise((resolve) => {
@@ -989,6 +1095,14 @@ if (btnLetter && loveLetter) {
     loveLetter.hidden = false;
     requestAnimationFrame(() => loveLetter.classList.add('show'));
     await typeLetter(LETTER_TEXT, 14);
+    // Animate signature entrance
+    if (signatureWrap) {
+      signatureWrap.classList.remove('show');
+      // slight delay to allow reflow
+      setTimeout(() => signatureWrap.classList.add('show'), 50);
+    }
+    // Ensure actions are visible and focused for accessibility
+    try { btnCloseLetter && btnCloseLetter.focus(); } catch {}
   });
 }
 
@@ -1002,7 +1116,9 @@ if (btnCloseLetter && loveLetter) {
 if (btnCopyLetter) {
   btnCopyLetter.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(LETTER_TEXT);
+      const sign = (signatureName && signatureName.textContent) ? signatureName.textContent : 'ผม';
+      const full = `${LETTER_TEXT}\n\nรัก,\n${sign}`;
+      await navigator.clipboard.writeText(full);
       showPickup('คัดลอกจดหมายแล้วนะ ❤');
     } catch {}
   });
@@ -1016,4 +1132,85 @@ function fireMegaShow() {
   heartFireworks(); setTimeout(heartFireworks, 300);
   petalShower();
   playChime();
+  // extra layers
+  startOrbits();
+  startRibbons();
+  startTwinkles();
+}
+
+// =============== Advanced WOW Layers ===============
+function startOrbits() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  const cx = w / 2, cy = h * 0.38;
+  const radii = [48, 86, 124].map(r => r * DPR);
+  for (let i = 0; i < radii.length; i++) {
+    const count = 6 + i * 3;
+    for (let j = 0; j < count; j++) {
+      fxItems.push({
+        kind: 'orbit',
+        cx, cy,
+        r: radii[i],
+        a: (j / count) * Math.PI * 2,
+        av: (0.003 + i * 0.001) * (j % 2 ? 1 : -1),
+        hue: 330 + (i * 10) + (j % 6) * 3,
+        size: 1.4 + i * 0.4,
+        life: 1200
+      });
+    }
+  }
+}
+
+function spawnBokehLayer() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  for (let i = 0; i < 18; i++) {
+    fxItems.push({
+      kind: 'bokeh',
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.15 * DPR,
+      vy: (Math.random() - 0.5) * 0.12 * DPR,
+      r: 40 + Math.random() * 90,
+      hue: 320 + Math.random() * 30,
+      alpha: 0.15 + Math.random() * 0.15,
+      life: 1600
+    });
+  }
+}
+
+function startRibbons() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  const cx = w / 2, cy = h * 0.38;
+  for (let i = 0; i < 4; i++) {
+    fxItems.push({
+      kind: 'ribbon',
+      cx, cy,
+      baseR: (70 + i * 20) * DPR,
+      baseA: Math.random() * Math.PI * 2,
+      vt: 0.03 + Math.random() * 0.02,
+      hue: 335 + i * 5,
+      points: [],
+      max: 60 + i * 14,
+      t: Math.random() * 100,
+      life: 1200
+    });
+  }
+}
+
+function startTwinkles() {
+  const w = fxCanvas.width, h = fxCanvas.height;
+  const cx = w / 2, cy = h * 0.38;
+  for (let i = 0; i < 30; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = (40 + Math.random() * 140) * DPR;
+    fxItems.push({
+      kind: 'twinkle',
+      x: cx + Math.cos(ang) * rad,
+      y: cy + Math.sin(ang) * rad * 0.9,
+      rot: Math.random() * Math.PI,
+      hue: 330 + Math.random() * 30,
+      speed: 0.6 + Math.random() * 1.2,
+      t: Math.random() * Math.PI * 2,
+      life: 600 + Math.random() * 600
+    });
+  }
 }

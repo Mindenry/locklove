@@ -26,6 +26,9 @@ const pickup = document.getElementById("pickupCarousel");
 const loveLetter = document.getElementById("loveLetter");
 const letterBody = document.getElementById("letterBody");
 const letterToast = document.getElementById("letterToast");
+const letterPhoto = document.getElementById('letterPhoto');
+const scratchCanvas = document.getElementById('scratchCanvas');
+const photoCaption = document.getElementById('photoCaption');
 const signatureWrap = document.getElementById("signatureWrap");
 const signatureName = document.getElementById("signatureName");
 const sealInitials = document.getElementById("sealInitials");
@@ -205,6 +208,21 @@ function setFromQuery() {
       const year = d.getFullYear();
       letterDate.textContent = `${day} ${month} ${year}`;
     } catch {}
+  }
+
+  // Optional letter photo via ?photo=
+  const photo = params.get('photo');
+  if (letterPhoto) {
+    if (photo) {
+      try { letterPhoto.src = decodeURIComponent(photo); } catch { letterPhoto.src = photo; }
+    } else {
+      // fallback sample image
+      letterPhoto.src = './img/bambi.jpg';
+    }
+  }
+  const caption = params.get('caption');
+  if (photoCaption) {
+    photoCaption.textContent = caption ? decodeURIComponent(caption) : 'ความน่ารักของคุณ อิอิ ✨';
   }
 }
 
@@ -1118,6 +1136,8 @@ if (btnLetter && loveLetter) {
   btnLetter.addEventListener('click', async () => {
     loveLetter.hidden = false;
     requestAnimationFrame(() => loveLetter.classList.add('show'));
+    // init scratch mask lazily when opening
+    try { initScratch(); } catch {}
     await typeLetter(LETTER_TEXT, 14);
     // Animate signature entrance
     if (signatureWrap) {
@@ -1187,6 +1207,120 @@ function showLetterToast(text) {
       setTimeout(() => { letterToast.hidden = true; }, 300);
     }, 1600);
   });
+}
+
+// =============== Scratch-to-reveal photo ===============
+function initScratch() {
+  if (!scratchCanvas || !letterPhoto) return;
+  const ctx = scratchCanvas.getContext('2d');
+  const DPR2 = Math.min(2, window.devicePixelRatio || 1);
+  // Ensure interactive again if previously revealed
+  scratchCanvas.style.pointerEvents = 'auto';
+  const drawCover = () => {
+    const rect = scratchCanvas.getBoundingClientRect();
+    ctx.save();
+    ctx.scale(DPR2, DPR2);
+    const grd = ctx.createLinearGradient(0, 0, rect.width, rect.height);
+    grd.addColorStop(0, 'rgba(255, 182, 193, 0.9)');
+    grd.addColorStop(0.5, 'rgba(255, 113, 155, 0.92)');
+    grd.addColorStop(1, 'rgba(255, 90, 140, 0.9)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    // add speckles for texture
+    ctx.globalAlpha = 0.15;
+    for (let i = 0; i < 120; i++) {
+      const x = Math.random() * rect.width;
+      const y = Math.random() * rect.height;
+      const r = Math.random() * 2 + 0.5;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  };
+  const resize = () => {
+    const rect = scratchCanvas.getBoundingClientRect();
+    scratchCanvas.width = Math.floor(rect.width * DPR2);
+    scratchCanvas.height = Math.floor(rect.height * DPR2);
+    drawCover();
+  };
+  resize();
+  let scratching = false;
+  const revealThreshold = 0.5; // 50%
+  const scratchRadius = isCoarsePointer ? 28 : 20; // bigger on touch
+  const eraseAt = (x, y) => {
+    const rect = scratchCanvas.getBoundingClientRect();
+    const px = (x - rect.left) * DPR2;
+    const py = (y - rect.top) * DPR2;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    // soft brush stroke
+    const g = ctx.createRadialGradient(px, py, 0, px, py, scratchRadius * DPR2);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(px, py, scratchRadius * DPR2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  };
+  const measureCleared = () => {
+    try {
+      const img = ctx.getImageData(0, 0, scratchCanvas.width, scratchCanvas.height).data;
+      let transparent = 0;
+      for (let i = 3; i < img.length; i += 4) { if (img[i] === 0) transparent++; }
+      const ratio = transparent / (img.length / 4);
+      return ratio;
+    } catch { return 0; }
+  };
+  const hint = scratchCanvas.parentElement && scratchCanvas.parentElement.querySelector('.scratch-hint');
+  const start = (e) => {
+    scratching = true;
+    hint && (hint.style.opacity = '0');
+    // Pointer capture for consistent drawing outside bounds
+    try { if (e.pointerId != null && scratchCanvas.setPointerCapture) scratchCanvas.setPointerCapture(e.pointerId); } catch {}
+    draw(e);
+  };
+  const end = () => {
+    scratching = false;
+    const r = measureCleared();
+    if (r >= revealThreshold) {
+      // clear all and remove canvas for perf
+      ctx.clearRect(0, 0, scratchCanvas.width, scratchCanvas.height);
+      scratchCanvas.style.pointerEvents = 'none';
+      if (hint) hint.remove();
+      // Celebrate reveal with extra sweetness
+      try { sparkleBurst(); ringPulse(); heartFireworks(); } catch {}
+    }
+  };
+  const draw = (e) => {
+    if (!scratching) return;
+    const touches = e.touches || e.changedTouches;
+    if (touches && touches.length) {
+      for (let i = 0; i < touches.length; i++) { eraseAt(touches[i].clientX, touches[i].clientY); }
+    } else if (e.clientX != null && e.clientY != null) {
+      eraseAt(e.clientX, e.clientY);
+    }
+  };
+  const onMove = (e) => { e.preventDefault && e.preventDefault(); draw(e); };
+  const onDown = (e) => { e.preventDefault && e.preventDefault(); start(e); };
+  const onUp = (e) => { e.preventDefault && e.preventDefault(); end(); };
+  const supportsPointer = typeof window !== 'undefined' && 'PointerEvent' in window;
+  if (supportsPointer) {
+    scratchCanvas.addEventListener('pointerdown', onDown, { passive: false });
+    scratchCanvas.addEventListener('pointermove', onMove, { passive: false });
+    scratchCanvas.addEventListener('pointerup', onUp, { passive: false });
+    scratchCanvas.addEventListener('pointercancel', onUp, { passive: false });
+    scratchCanvas.addEventListener('pointerleave', onUp, { passive: false });
+  } else {
+    // Touch fallback
+    scratchCanvas.addEventListener('touchstart', onDown, { passive: false });
+    scratchCanvas.addEventListener('touchmove', onMove, { passive: false });
+    scratchCanvas.addEventListener('touchend', onUp, { passive: false });
+    scratchCanvas.addEventListener('touchcancel', onUp, { passive: false });
+    // Mouse fallback
+    scratchCanvas.addEventListener('mousedown', onDown, { passive: false });
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp, { passive: false });
+  }
+  window.addEventListener('resize', resize);
 }
 
 // One-tap mega show to make it denser and wow

@@ -1,4 +1,7 @@
 const TARGET_CODE = [2, 0, 1, 1, 4, 6];
+// Responsive/device capability flags
+const isCoarsePointer = (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia('(pointer: coarse)').matches : ('ontouchstart' in window);
+const isFinePointer = (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia('(pointer: fine) and (hover: hover)').matches : !isCoarsePointer;
 
 // Use new dials inside the lock
 const dials = Array.from(document.querySelectorAll(".dial"));
@@ -22,6 +25,7 @@ const btnCloseLetter = document.getElementById("btnCloseLetter");
 const pickup = document.getElementById("pickupCarousel");
 const loveLetter = document.getElementById("loveLetter");
 const letterBody = document.getElementById("letterBody");
+const letterToast = document.getElementById("letterToast");
 const signatureWrap = document.getElementById("signatureWrap");
 const signatureName = document.getElementById("signatureName");
 const sealInitials = document.getElementById("sealInitials");
@@ -205,19 +209,19 @@ function setFromQuery() {
 }
 
 
-// Mouse parallax
+// Mouse parallax (pointer-fine only)
 const scene = document.getElementById("scene");
-scene.addEventListener("mousemove", (e) => {
-  const rect = lockCard.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / rect.width - 0.5;
-  const y = (e.clientY - rect.top) / rect.height - 0.5;
-  lockCard.style.transform = `rotateX(${(-y * 8).toFixed(2)}deg) rotateY(${(
-    x * 12
-  ).toFixed(2)}deg)`;
-});
-scene.addEventListener("mouseleave", () => {
-  lockCard.style.transform = "rotateX(0deg) rotateY(0deg)";
-});
+if (scene && isFinePointer) {
+  scene.addEventListener("mousemove", (e) => {
+    const rect = lockCard.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    lockCard.style.transform = `rotateX(${(-y * 8).toFixed(2)}deg) rotateY(${(x * 12).toFixed(2)}deg)`;
+  });
+  scene.addEventListener("mouseleave", () => {
+    lockCard.style.transform = "rotateX(0deg) rotateY(0deg)";
+  });
+}
 
 // Bind buttons (defensive: skip if missing)
 upButtons.forEach((btn, i) => {
@@ -430,6 +434,8 @@ const DPR = Math.min(2, window.devicePixelRatio || 1);
 let fxItems = [];
 // Predeclare heart outline state early to avoid TDZ
 let heartOutline = { active: false, t: 0, beads: [], targets: [] };
+// Predeclare heart targets to avoid TDZ in resize handlers
+let heartTargets = [];
 
 function fitCanvas(canvas) {
   const { innerWidth: w, innerHeight: h } = window;
@@ -447,8 +453,19 @@ window.addEventListener("resize", () => {
   fitCanvas(heartsCanvas);
   fitCanvas(morphCanvas);
   fitCanvas(fxCanvas);
+  heartTargets = buildHeartTargets();
   render();
 });
+// Keep fitting when mobile UI/keyboard changes visual viewport
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    fitCanvas(confettiCanvas);
+    fitCanvas(heartsCanvas);
+    fitCanvas(morphCanvas);
+    fitCanvas(fxCanvas);
+    heartTargets = buildHeartTargets();
+  });
+}
 
 // Ambient background particles (CSS-driven)
 const bg = document.getElementById("bgParticles");
@@ -500,8 +517,9 @@ function drawConfetti(ctx) {
   }
 }
 
+const CONFETTI_BURST = isCoarsePointer ? 110 : 160;
 function fireConfetti() {
-  spawnConfetti(160);
+  spawnConfetti(CONFETTI_BURST);
 }
 
 // Hearts float
@@ -588,7 +606,13 @@ render();
 // =============== Morphing Particles to Heart ===============
 let morphState = { active: false, t: 0 };
 let particles = [];
-const PARTICLE_COUNT = 600;
+const PARTICLE_COUNT = (() => {
+  const w = Math.max(320, Math.min(window.innerWidth, 1200));
+  const h = Math.max(480, Math.min(window.innerHeight, 1200));
+  const area = (w * h) / (DPR * DPR);
+  const base = isCoarsePointer ? 0.00045 : 0.0007; // density
+  return Math.max(300, Math.min(600, Math.round(area * base)));
+})();
 
 function createParticles() {
   const w = morphCanvas.width,
@@ -631,7 +655,7 @@ function buildHeartTargets() {
   return targets;
 }
 
-let heartTargets = buildHeartTargets();
+heartTargets = buildHeartTargets();
 window.addEventListener("resize", () => {
   heartTargets = buildHeartTargets();
 });
@@ -1109,6 +1133,8 @@ if (btnLetter && loveLetter) {
 if (btnCloseLetter && loveLetter) {
   btnCloseLetter.addEventListener('click', () => {
     loveLetter.classList.remove('show');
+    // scroll to top to avoid stuck position on next open (mobile)
+    try { const paper = loveLetter.querySelector('.paper'); paper && (paper.scrollTop = 0); } catch {}
     setTimeout(() => { loveLetter.hidden = true; }, 300);
   });
 }
@@ -1118,9 +1144,48 @@ if (btnCopyLetter) {
     try {
       const sign = (signatureName && signatureName.textContent) ? signatureName.textContent : 'ผม';
       const full = `${LETTER_TEXT}\n\nรัก,\n${sign}`;
-      await navigator.clipboard.writeText(full);
-      showPickup('คัดลอกจดหมายแล้วนะ ❤');
+      // robust copy with fallback for iOS Safari
+      let copied = false;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try { await navigator.clipboard.writeText(full); copied = true; } catch {}
+      }
+      if (!copied) {
+        const ta = document.createElement('textarea');
+        ta.value = full; ta.setAttribute('readonly', ''); ta.style.position = 'absolute'; ta.style.left = '-9999px';
+        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length);
+        try { copied = document.execCommand('copy'); } catch {}
+        document.body.removeChild(ta);
+      }
+      if (copied) {
+        showLetterToast('คัดลอกจดหมายแล้วนะ ❤');
+      } else {
+        showLetterToast('คัดลอกไม่สำเร็จ ลองอีกครั้งนะ');
+      }
     } catch {}
+  });
+}
+
+// Tap outside paper to close on mobile
+if (loveLetter) {
+  loveLetter.addEventListener('pointerdown', (e) => {
+    const paper = loveLetter.querySelector('.paper');
+    if (!paper) return;
+    if (!paper.contains(e.target)) {
+      btnCloseLetter && btnCloseLetter.click();
+    }
+  });
+}
+
+function showLetterToast(text) {
+  if (!letterToast) return;
+  letterToast.textContent = text;
+  letterToast.hidden = false;
+  requestAnimationFrame(() => {
+    letterToast.classList.add('show');
+    setTimeout(() => {
+      letterToast.classList.remove('show');
+      setTimeout(() => { letterToast.hidden = true; }, 300);
+    }, 1600);
   });
 }
 

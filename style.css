@@ -20,6 +20,9 @@
         radial-gradient(1500px 900px at -20% 30%, rgba(30, 14, 50, 0.6), transparent 70%),
         linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
     --reel-cell: 60px;
+    /* iOS safe areas */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 * {
@@ -112,7 +115,7 @@ canvas {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 4vh 16px;
+    padding: calc(4vh + var(--safe-top)) 16px calc(4vh + var(--safe-bottom));
     perspective: 1500px;
     z-index: 2;
     gap: 2rem;
@@ -247,6 +250,13 @@ canvas {
         0 30px 80px rgba(0, 0, 0, 0.5),
         0 0 120px rgba(255, 61, 110, 0.3),
         inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Disable heavy hover effects on touch devices */
+@media (hover: none) and (pointer: coarse) {
+    .lock-card:hover { transform: none; }
+    .arrow:hover { transform: none; }
+    .btn:hover { transform: none; }
 }
 
 /* Realistic 3D lock design */
@@ -555,6 +565,7 @@ canvas {
     transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
     position: relative;
     overflow: hidden;
+    min-height: 44px; /* touch target */
 }
 
 .btn::before {
@@ -636,6 +647,7 @@ canvas {
     opacity: 0;
     transition: opacity 1s ease;
     pointer-events: none;
+    padding: calc(12px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
 }
 
 .love-overlay.show {
@@ -790,6 +802,7 @@ body.unlocked .lock-card { display: none; }
     gap: 10px;
     justify-content: center;
     margin-top: 18px;
+    flex-wrap: wrap;
 }
 
 .btn-love {
@@ -866,6 +879,27 @@ body.unlocked .lock-card { display: none; }
     .dial { width: 38px; height: 90px; }
     :root { --reel-cell: 46px; }
     .digit { font-size: 26px; }
+    .overlay-actions .btn { flex: 1 1 calc(50% - 8px); }
+    .paper { width: min(720px, 96vw); max-height: 86vh; }
+    .letter-actions { justify-content: stretch; gap: 10px; width: min(720px, 94vw); }
+    .letter-actions .btn { flex: 1 1 100%; font-size: 16px; padding: 14px 18px; }
+}
+
+/* Ultra-narrow phones */
+@media (max-width: 380px) {
+    .lock-3d { width: 204px; height: 244px; }
+    .dials { top: 142px; gap: 0.16rem; padding: 0.5rem 0.7rem; }
+    .dial { width: 34px; height: 84px; }
+    :root { --reel-cell: 44px; }
+    .digit { font-size: 24px; }
+}
+
+/* Landscape small height: compress layout */
+@media (max-height: 580px) and (orientation: landscape) {
+    .scene { gap: 1rem; padding: 8px 12px; }
+    .lock-card { padding: 1.2rem 1rem 1.2rem; transform: none; }
+    .lock-3d { width: 200px; height: 228px; }
+    .dials { top: 132px; transform: translateX(-50%); }
 }
 
 /* Romantic letter modal */
@@ -894,7 +928,7 @@ body.unlocked .lock-card { display: none; }
     box-shadow: 0 40px 120px rgba(255, 61, 110, 0.25);
     border: 1px solid rgba(255, 105, 180, 0.25);
     padding: clamp(16px, 3vw, 28px);
-    padding-bottom: clamp(80px, 14vw, 120px);
+    padding-bottom: calc(clamp(80px, 14vw, 120px) + var(--safe-bottom) + 84px);
     position: relative;
 }
 
@@ -1064,17 +1098,21 @@ body.unlocked .lock-card { display: none; }
 }
 
 .letter-actions {
-    position: sticky;
-    bottom: 0;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(12px + var(--safe-bottom));
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-    margin-top: 16px;
-    padding-top: 12px;
-    background: linear-gradient(180deg, rgba(255, 246, 250, 0), rgba(255, 235, 245, 0.85) 40%, rgba(255, 230, 242, 0.95));
-    backdrop-filter: blur(2px);
-    border-top: 1px solid rgba(227, 93, 134, 0.18);
-    z-index: 2;
+    padding: 10px 12px;
+    width: min(720px, 96vw);
+    background: linear-gradient(180deg, rgba(255, 246, 250, 0.92), rgba(255, 235, 245, 0.96));
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(227, 93, 134, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 18px 44px rgba(199, 77, 122, 0.22);
+    z-index: 9;
 }
 
 /* Make actions inside paper more visible on light background */
@@ -1085,6 +1123,26 @@ body.unlocked .lock-card { display: none; }
     border-color: rgba(227, 93, 134, 0.25);
 }
 .paper .btn.ghost:hover { background: rgba(227, 93, 134, 0.16); }
+
+/* Letter toast for copy feedback */
+.letter-toast {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(96px + var(--safe-bottom));
+    background: rgba(8, 3, 21, 0.8);
+    color: #ffe6ef;
+    border: 1px solid rgba(255, 105, 180, 0.35);
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    font-size: 14px;
+    z-index: 9;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+}
+.letter-toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 
 /* Subtle paper watermark */
 .paper::after {
